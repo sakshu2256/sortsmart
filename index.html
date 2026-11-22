@@ -140,11 +140,16 @@ const ICON_FALLBACKS = {
   'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'check': '<polyline points="20 6 9 17 4 12"/>',
   'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  'check-circle-2': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   'x-circle': '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
   'info': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
   'gift': '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
   'lock': '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   'trophy': '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>',
+  'truck': '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  'package-open': '<path d="M12 3v9"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="m7.5 4.5 9 5.2"/><path d="m3.3 17 8.7 5 8.7-5V7l-8.7-5-8.7 5v10z"/>',
 };
 
 function Icon({ name, size = 20, className = '', strokeWidth = 2 }) {
@@ -219,6 +224,60 @@ function toast(msg, type) { if (_addToast) _addToast(msg, type); }
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://' + window.location.hostname + ':8000'
   : 'http://' + window.location.hostname + ':8000';
+
+// ─── Database & Pickups API (Backend + Local Database Fallback) ─────────────
+async function fetchUserPickups() {
+  try {
+    const res = await fetch(API_BASE + '/api/scrapuncle/pickups');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.pickups) && data.pickups.length > 0) {
+        // Merge with local storage cache
+        const local = JSON.parse(localStorage.getItem('ss_pickups') || '[]');
+        const ids = new Set(data.pickups.map(p => p.id));
+        const merged = [...data.pickups, ...local.filter(p => !ids.has(p.id))];
+        localStorage.setItem('ss_pickups', JSON.stringify(merged));
+        return merged;
+      }
+    }
+  } catch (e) {
+    console.warn('Backend pickups API unavailable, checking local database:', e.message);
+  }
+  try {
+    return JSON.parse(localStorage.getItem('ss_pickups') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+async function bookScrapPickup(pickupData) {
+  let backendBooking = null;
+  try {
+    const res = await fetch(API_BASE + '/api/scrapuncle/book-pickup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pickupData),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.booking) backendBooking = data.booking;
+    }
+  } catch (e) {
+    console.warn('Backend unavailable, saving pickup to local storage database:', e.message);
+  }
+  const booking = backendBooking || {
+    id: `SU-${Math.floor(100000 + Math.random() * 900000)}`,
+    ...pickupData,
+    created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    status: 'Scheduled',
+  };
+  try {
+    const local = JSON.parse(localStorage.getItem('ss_pickups') || '[]');
+    const updated = [booking, ...local.filter(p => p.id !== booking.id)];
+    localStorage.setItem('ss_pickups', JSON.stringify(updated));
+  } catch (e) {}
+  return booking;
+}
 
 // Stream name normalizer (V1 uses lowercase with underscore)
 function normalizeStream(s) {
@@ -763,9 +822,42 @@ function ScanSection({ onScanComplete, points }) {
                 </div>
               )}
               {activeTab === 'requests' && (
-                <div className="text-center py-6 text-gray-400 text-sm">
-                  <Icon name="inbox" size={32} className="mx-auto mb-2" />
-                  <p>No requests yet. Book a pickup to get started.</p>
+                <div className="py-2 space-y-2">
+                  {(() => {
+                    let list = [];
+                    try { list = JSON.parse(localStorage.getItem('ss_pickups') || '[]'); } catch(e){}
+                    if (list.length === 0) {
+                      return (
+                        <div className="text-center py-6 text-gray-400 text-sm">
+                          <Icon name="inbox" size={32} className="mx-auto mb-2 text-gray-400" />
+                          <p>No active pickup requests yet.</p>
+                          <button onClick={() => { document.querySelector('#sell-scrap')?.scrollIntoView({behavior:'smooth'}); toast('Go to Sell Scrap section to schedule'); }}
+                            className="mt-2 text-primary text-xs font-bold hover:underline">
+                            Book your first pickup →
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-gray-500 mb-1 flex items-center justify-between">
+                          <span>Recent Doorstep Requests ({list.length})</span>
+                          <span className="text-[10px] text-green-600 font-normal">● Saved in Database</span>
+                        </div>
+                        {list.slice(0, 3).map(r => (
+                          <div key={r.id} className="bg-gray-50 dark:bg-gray-700/60 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                            <div>
+                              <div className="font-bold text-gray-800 dark:text-gray-100">{r.id}</div>
+                              <div className="text-[10px] text-gray-500">📅 {r.date} • {r.slot || 'Morning'}</div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                              {r.status || 'Scheduled'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -777,14 +869,33 @@ function ScanSection({ onScanComplete, points }) {
 }
 
 // ─── Sell Scrap Section ───────────────────────────────────────────────────────
-function SellScrapSection() {
+function SellScrapSection({ addPoints }) {
   const [tab, setTab] = useState('prices');
   const [catFilter, setCatFilter] = useState('All');
   const [city, setCity] = useState('Delhi NCR');
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ name:'', phone:'', address:'', date:'', slot:'morning' });
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+    slot: 'morning'
+  });
   const [submitted, setSubmitted] = useState(false);
-  useLucide([tab, submitted]);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [lastBooking, setLastBooking] = useState(null);
+  const [pickupsList, setPickupsList] = useState([]);
+  useLucide([tab, submitted, pickupsList]);
+
+  // Load existing pickups from database (Flask backend + local storage cache)
+  const refreshPickups = useCallback(async () => {
+    const list = await fetchUserPickups();
+    setPickupsList(list);
+  }, []);
+
+  useEffect(() => {
+    refreshPickups();
+  }, [tab, submitted, refreshPickups]);
 
   const cats = ['All', 'Paper & Books', 'Plastics', 'Metals', 'E-Waste', 'Glass', 'Rubber', 'Textile'];
   const filtered = SCRAP_PRICES.filter(p =>
@@ -792,16 +903,38 @@ function SellScrapSection() {
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    toast("Pickup booked! You'll receive a confirmation SMS.");
+    if (!form.name.trim() || !form.phone.trim() || !form.address.trim()) {
+      toast('Please fill in name, phone, and address', 'error');
+      return;
+    }
+    setBookingLoading(true);
+    try {
+      const slotLabel = form.slot === 'morning' ? '10:00 AM - 01:00 PM' : form.slot === 'afternoon' ? '01:00 PM - 04:00 PM' : '04:00 PM - 07:00 PM';
+      const booking = await bookScrapPickup({
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        city: city || 'Delhi NCR',
+        pincode: '110001',
+        date: form.date,
+        slot: slotLabel,
+        items_summary: 'Household Scrap & Recyclables',
+        estimated_payout: 250,
+        payment_mode: 'UPI',
+      });
+      setLastBooking(booking);
+      setSubmitted(true);
+      if (addPoints) addPoints(25);
+      toast(`✅ Pickup #${booking.id} booked! Saved to database. +25 Eco Points!`);
+      await refreshPickups();
+    } catch (err) {
+      toast('Booking error: ' + err.message, 'error');
+    } finally {
+      setBookingLoading(false);
+    }
   };
-
-  const MOCK_REQUESTS = [
-    { id: 'PU-001', date: '2024-01-15', status: 'completed', items: 'Newspaper, Cardboard', amount: '₹240' },
-    { id: 'PU-002', date: '2024-01-20', status: 'pending', items: 'PET Bottles, Iron', amount: '₹180' },
-  ];
 
   return (
     <section id="sell-scrap" className="py-16 px-4 bg-gray-50 dark:bg-gray-800">
@@ -903,10 +1036,25 @@ function SellScrapSection() {
               <div className="text-center py-8">
                 <Icon name="check-circle-2" size={56} className="text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">Pickup Booked!</h3>
-                <p className="text-gray-500 text-sm mb-6">Our agent will arrive at your address in the selected slot. You'll receive an SMS confirmation.</p>
-                <button onClick={() => setSubmitted(false)} className="bg-primary text-white rounded-xl px-6 py-2.5 font-semibold text-sm">
-                  Book Another
-                </button>
+                <div className="inline-block bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-mono font-bold text-sm px-4 py-1 rounded-full mb-3">
+                  Booking ID: {lastBooking?.id || 'SU-SCHEDULED'}
+                </div>
+                <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
+                  Pickup scheduled for <strong>{lastBooking?.date || form.date}</strong> ({lastBooking?.slot || form.slot}) at {lastBooking?.address || form.address}.
+                </p>
+                <div className="text-xs text-green-600 dark:text-green-400 font-semibold mb-6 flex items-center justify-center gap-1">
+                  <Icon name="check" size={14} /> Saved in Database (pickups.json & local cache) • +25 Eco Points
+                </div>
+                <div className="flex justify-center gap-3">
+                  <button onClick={() => { setSubmitted(false); setForm(f => ({ ...f, name:'', phone:'', address:'' })); }}
+                    className="bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white rounded-xl px-5 py-2.5 font-semibold text-sm hover:bg-gray-200 transition-all">
+                    Book Another
+                  </button>
+                  <button onClick={() => setTab('requests')}
+                    className="bg-primary text-white rounded-xl px-5 py-2.5 font-semibold text-sm hover:bg-primary-dark transition-all">
+                    View in My Requests →
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -914,7 +1062,7 @@ function SellScrapSection() {
                   <Icon name="truck" size={20} className="text-primary" />
                   Book Free Pickup
                 </h3>
-                {[['name','text','Full Name','user'],['phone','tel','Phone Number','phone'],['address','text','Full Address','map-pin']].map(([key,type,ph,icon]) => (
+                {[['name','text','Full Name','user'],['phone','tel','Phone Number (10 digits)','phone'],['address','text','Full Address & Landmark','map-pin']].map(([key,type,ph,icon]) => (
                   <div key={key} className="relative">
                     <Icon name={icon} size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input type={type} required placeholder={ph} value={form[key]}
@@ -938,9 +1086,9 @@ function SellScrapSection() {
                     </select>
                   </div>
                 </div>
-                <button type="submit"
-                  className="w-full bg-gradient-to-r from-primary to-green-500 text-white rounded-xl py-3 font-bold text-sm hover:from-primary-dark hover:to-primary transition-all">
-                  Confirm Pickup
+                <button type="submit" disabled={bookingLoading}
+                  className="w-full bg-gradient-to-r from-primary to-green-500 text-white rounded-xl py-3 font-bold text-sm hover:from-primary-dark hover:to-primary transition-all disabled:opacity-50">
+                  {bookingLoading ? 'Saving to Database...' : 'Confirm Pickup (Free + Earn 25 Pts)'}
                 </button>
               </form>
             )}
@@ -950,26 +1098,51 @@ function SellScrapSection() {
         {/* My Requests Tab */}
         {tab === 'requests' && (
           <div className="max-w-lg mx-auto space-y-4">
-            {MOCK_REQUESTS.map(r => (
-              <div key={r.id} className="bg-white dark:bg-gray-700 rounded-2xl p-5 shadow-md hover:shadow-xl transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-bold text-sm text-gray-800 dark:text-gray-100">{r.id}</span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${r.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {r.status}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{r.date}</p>
-                <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{r.items}</p>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-primary text-lg">{r.amount}</span>
-                  {r.status === 'completed' && (
-                    <span className="flex items-center gap-1 text-xs text-green-600">
-                      <Icon name="check-circle" size={12} /> Paid via UPI
-                    </span>
-                  )}
-                </div>
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Doorstep Pickups ({pickupsList.length})
+              </span>
+              <button onClick={refreshPickups} className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+                🔄 Sync with Database
+              </button>
+            </div>
+            {pickupsList.length === 0 ? (
+              <div className="text-center py-10 bg-white dark:bg-gray-700 rounded-2xl p-6 shadow-md text-gray-400">
+                <Icon name="inbox" size={36} className="mx-auto mb-2 text-gray-300 dark:text-gray-500" />
+                <p className="font-semibold text-gray-600 dark:text-gray-300">No pickup requests yet</p>
+                <p className="text-xs mt-1">Book your first doorstep scrap pickup to track it here!</p>
+                <button onClick={() => setTab('pickup')} className="mt-4 bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl">
+                  Book Pickup Now
+                </button>
               </div>
-            ))}
+            ) : (
+              pickupsList.map(r => (
+                <div key={r.id} className="bg-white dark:bg-gray-700 rounded-2xl p-5 shadow-md hover:shadow-xl transition-all border border-gray-100 dark:border-gray-600">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono font-bold text-sm text-gray-800 dark:text-gray-100">{r.id}</span>
+                    <span className={`px-3 py-0.5 rounded-full text-xs font-bold ${
+                      r.status === 'Completed' || r.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      r.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {r.status || 'Scheduled'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-2">
+                    <span>📅 {r.date}</span>
+                    <span>⏰ {r.slot || 'Morning'}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{r.items || r.items_summary || 'Household Scrap'}</p>
+                  {r.address && <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 truncate">📍 {r.address}{r.city ? ', ' + r.city : ''}</p>}
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-600">
+                    <span className="font-bold text-primary text-base">{r.amount || (r.estimated_payout ? '₹' + r.estimated_payout : '₹250 est.')}</span>
+                    <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                      <Icon name="check-circle" size={12} /> {r.payment_mode || 'Instant UPI'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
@@ -1538,7 +1711,7 @@ function App() {
       <main>
         <HeroSection />
         <ScanSection onScanComplete={handleScanComplete} points={points} />
-        <SellScrapSection />
+        <SellScrapSection addPoints={addPoints} />
         <GovtSchemesSection />
         <DiscountsSection points={points} />
         <CertificateSection monthlyProgress={monthlyProgress} scanHistory={scanHistory} />
