@@ -214,21 +214,67 @@ function ToastContainer() {
 }
 function toast(msg, type) { if (_addToast) _addToast(msg, type); }
 
-// ─── Mock analyzeItem ─────────────────────────────────────────────────────────
+// ─── AI Backend Config ─────────────────────────────────────────────────────────
+// Auto-detect: use same host as page (works on mobile via LAN), fallback to localhost
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://' + window.location.hostname + ':8000'
+  : 'http://' + window.location.hostname + ':8000';
+
+// Stream name normalizer (V1 uses lowercase with underscore)
+function normalizeStream(s) {
+  if (!s) return 'DRY';
+  const m = { 'dry': 'DRY', 'wet': 'WET', 'sanitary': 'SANITARY', 'special_care': 'SPECIAL CARE', 'special care': 'SPECIAL CARE', 'e-waste': 'SPECIAL CARE' };
+  return m[s.toLowerCase()] || s.toUpperCase();
+}
+
+// Fallback mock (used if backend unreachable)
 const MOCK_RESULTS = {
   'plastic bottle': { stream: 'DRY', item: 'Plastic Bottle (PET)', material: 'PET Plastic #1', steps: ['Rinse thoroughly', 'Remove cap (dispose separately)', 'Crush flat', 'Place in DRY/Recyclable bin'], confidence: 92, points: 5, co2: 0.12, scrapVal: 2 },
   'cardboard box': { stream: 'DRY', item: 'Cardboard Box', material: 'Corrugated Paper', steps: ['Flatten completely', 'Remove tape/staples', 'Keep dry', 'Bundle with other cardboard'], confidence: 97, points: 4, co2: 0.09, scrapVal: 1.5 },
   'battery': { stream: 'SPECIAL CARE', item: 'Alkaline Battery', material: 'Zinc-Manganese Dioxide', steps: ['Do NOT throw in regular bin', 'Tape terminals with electrical tape', 'Take to nearest e-waste kiosk', 'Ask retailer for take-back'], confidence: 88, points: 10, co2: 0.45, scrapVal: 0 },
-  'phone cover': { stream: 'DRY', item: 'Mobile Phone Case', material: 'Thermoplastic Polyurethane (TPU)', steps: ['Check for metal parts; remove if any', 'Place in DRY bin if rigid plastic', 'If silicone: special polymer recycling only'], confidence: 74, points: 3, co2: 0.07, scrapVal: 0.5 },
+  'phone cover': { stream: 'DRY', item: 'Mobile Phone Case', material: 'TPU Plastic', steps: ['Check for metal parts; remove if any', 'Place in DRY bin if rigid plastic', 'If silicone: special polymer recycling only'], confidence: 74, points: 3, co2: 0.07, scrapVal: 0.5 },
   'default': { stream: 'WET', item: 'Mixed Organic Waste', material: 'Biodegradable', steps: ['Drain excess liquid', 'Place in GREEN/WET bin', 'Can be composted at home'], confidence: 65, points: 2, co2: 0.03, scrapVal: 0 },
 };
-function analyzeItem(input) {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const key = Object.keys(MOCK_RESULTS).find(k => input.toLowerCase().includes(k)) || 'default';
-      resolve({ ...MOCK_RESULTS[key] });
-    }, 1500);
-  });
+
+// ─── Real AI analyzeItem — calls V1 Flask backend ─────────────────────────────
+async function analyzeItem(input, imageFile) {
+  try {
+    const form = new FormData();
+    form.append('language', 'English');
+    if (imageFile) {
+      // Photo mode
+      form.append('image', imageFile);
+    } else {
+      // Text mode
+      form.append('description', input);
+    }
+    const res = await fetch(API_BASE + '/api/analyze', { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'API error ' + res.status);
+    }
+    const data = await res.json();
+    // Map V1 response fields to V2 format
+    const steps = Array.isArray(data.disposal_steps) ? data.disposal_steps
+      : Array.isArray(data.steps) ? data.steps
+      : (data.disposal_instructions || '').split('\n').filter(Boolean);
+    return {
+      stream: normalizeStream(data.waste_stream || data.stream || data.category || 'DRY'),
+      item: data.item_name || data.item || data.name || input,
+      material: data.material || data.material_type || '',
+      steps: steps.length ? steps : ['Place in appropriate bin as per local rules'],
+      confidence: Math.round(data.confidence > 1 ? data.confidence : (data.confidence || 0.75) * 100),
+      points: data.eco_points || data.points || 5,
+      co2: data.co2_saved || data.co2 || 0.1,
+      scrapVal: data.scrap_value || data.scrapVal || 0,
+    };
+  } catch (err) {
+    console.warn('Backend unreachable, using mock:', err.message);
+    toast('⚠️ Offline mode — ' + err.message, 'error');
+    // Fallback to mock
+    const key = Object.keys(MOCK_RESULTS).find(k => (input || '').toLowerCase().includes(k)) || 'default';
+    return { ...MOCK_RESULTS[key] };
+  }
 }
 
 // Stream color map
@@ -470,11 +516,13 @@ function ScanSection({ onScanComplete, points }) {
 
   const handleAnalyze = async () => {
     const input = mode === 'photo' ? (imageFile ? imageFile.name : '') : description;
-    if (!input.trim()) { setError('Please upload a photo or describe the item.'); return; }
+    if (mode === 'photo' && !imageFile) { setError('Please upload a photo first.'); return; }
+    if (mode === 'text' && !description.trim()) { setError('Please describe the item.'); return; }
     setError('');
     setLoading(true);
     setResult(null);
-    const res = await analyzeItem(input);
+    // Pass imageFile for photo mode so real API gets the actual image
+    const res = await analyzeItem(input, mode === 'photo' ? imageFile : null);
     setResult(res);
     setLoading(false);
     onScanComplete(res);
