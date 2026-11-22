@@ -1,0 +1,46 @@
+{
+  "lastUpdated": "2026-11-22",
+  "market": "Delhi NCR",
+  "categories": {
+    "paper": {
+      "label": "Paper & Books",
+      "items": [
+        { "id": "newspaper", "name": "Newspaper / Akbar", "rate": 16, "unit": "kg", "trend": "stable", "note": "Clean, dry condition" },
+        { "id": "cardboard", "name": "Cardboard / Boxes", "rate": 14, "unit": "kg", "trend": "up", "note": "Flattened preferred" },
+        { "id": "white_paper", "name": "White Office Paper", "rate": 20, "unit": "kg", "trend": "stable", "note": "Clean A4/printout sheets" },
+        { "id": "books", "name": "Books / Notebooks", "rate": 12, "unit": "kg", "trend": "stable", "note": "No glossy covers" }
+      ]
+    },
+    "plastics": {
+      "label": "Plastics",
+      "items": [
+        { "id": "pet_bottles", "name": "PET Bottles (Water/Soda)", "rate": 15, "unit": "kg", "trend": "up", "note": "Rinsed and crushed" },
+        { "id": "hard_plastic", "name": "Hard Plastic (Buckets/Crates)", "rate": 18, "unit": "kg", "trend": "stable", "note": "No PVC" },
+        { "id": "plastic_bags", "name": "Plastic Carry Bags (HDPE)", "rate": 8, "unit": "kg", "trend": "down", "note": "Clean and dry" },
+        { "id": "plastic_drums", "name": "Plastic Drums / Containers", "rate": 22, "unit": "kg", "trend": "up", "note": "Food-grade preferred" }
+      ]
+    },
+    "metals": {
+      "label": "Metals & Copper",
+      "items": [
+        { "id": "copper", "name": "Pure Copper Wire / Utensils", "rate": 540, "unit": "kg", "trend": "up", "note": "Best price in market" },
+        { "id": "aluminum", "name": "Aluminum Cans / Sections", "rate": 120, "unit": "kg", "trend": "stable", "note": "Clean, no paint" },
+        { "id": "iron", "name": "Iron / Steel Scrap (Loha)", "rate": 34, "unit": "kg", "trend": "stable", "note": "Rust OK" },
+        { "id": "brass", "name": "Brass (Peetal)", "rate": 320, "unit": "kg", "trend": "up", "note": "High demand" },
+        { "id": "steel_utensils", "name": "Stainless Steel Utensils", "rate": 65, "unit": "kg", "trend": "stable", "note": "Without coating" }
+      ]
+    },
+    "ewaste": {
+      "label": "E-Waste & Appliances",
+      "items": [
+        { "id": "split_ac", "name": "Split AC (1.5 Ton Full Set)", "rate": 4500, "unit": "piece", "trend": "up", "note": "With copper coil" },
+        { "id": "laptop", "name": "Laptop / MacBook", "rate": 400, "unit": "piece", "trend": "stable", "note": "Working or damaged" },
+        { "id": "mobile", "name": "Old Mobile Phone", "rate": 150, "unit": "piece", "trend": "up", "note": "Any condition" },
+        { "id": "refrigerator", "name": "Refrigerator (Double Door)", "rate": 1100, "unit": "piece", "trend": "stable", "note": "Any brand" },
+        { "id": "lead_battery", "name": "Lead Acid Battery (Car/UPS)", "rate": 98, "unit": "kg", "trend": "up", "note": "CPCB authorized only" },
+        { "id": "cfl_tube", "name": "CFL / Tube Lights", "rate": 25, "unit": "kg", "trend": "stable", "note": "Handle with care" },
+        { "id": "pcb_board", "name": "Circuit Boards / PCB", "rate": 180, "unit": "kg", "trend": "up", "note": "Gold recovery value" }
+      ]
+    }
+  }
+}
